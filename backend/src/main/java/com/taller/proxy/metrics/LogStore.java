@@ -1,0 +1,68 @@
+package com.taller.proxy.metrics;
+
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.*;
+
+/** Almacen en memoria (acotado) de logs y contadores acumulados por servicio. */
+@Component
+public class LogStore {
+
+    private static final class Stats {
+        long total, errors, sumDurationMs;
+    }
+
+    private final int maxEntries;
+    private final Deque<LogEntry> entries = new ArrayDeque<>(); // mas reciente primero
+    private final Map<String, Stats> stats = new LinkedHashMap<>();
+
+    public LogStore(@Value("${app.logs.max-entries:5000}") int maxEntries) {
+        this.maxEntries = maxEntries;
+    }
+
+    public synchronized void add(LogEntry entry) {
+        entries.addFirst(entry);
+        while (entries.size() > maxEntries) {
+            entries.removeLast();
+        }
+        Stats s = stats.computeIfAbsent(entry.serviceId(), k -> new Stats());
+        s.total++;
+        s.sumDurationMs += entry.durationMs();
+        if (LogEntry.ERROR.equals(entry.status())) {
+            s.errors++;
+        }
+    }
+
+    public synchronized Page<LogEntry> query(String service, String status, Instant from, Instant to, int page, int size) {
+        List<LogEntry> filtered = entries.stream()
+                .filter(e -> isBlank(service) || e.serviceId().equalsIgnoreCase(service))
+                .filter(e -> isBlank(status) || e.status().equalsIgnoreCase(status))
+                .filter(e -> from == null || !e.timestamp().isBefore(from))
+                .filter(e -> to == null || !e.timestamp().isAfter(to))
+                .toList();
+
+        int safeSize = Math.max(1, Math.min(size, 200));
+        int safePage = Math.max(0, page);
+        int fromIdx = Math.min(safePage * safeSize, filtered.size());
+        int toIdx = Math.min(fromIdx + safeSize, filtered.size());
+        int totalPages = (int) Math.ceil(filtered.size() / (double) safeSize);
+        return new Page<>(filtered.subList(fromIdx, toIdx), safePage, safeSize, filtered.size(), totalPages);
+    }
+
+    public synchronized List<ServiceSummary> summary(Collection<String> serviceIds) {
+        List<ServiceSummary> result = new ArrayList<>();
+        for (String id : serviceIds) {
+            Stats s = stats.getOrDefault(id, new Stats());
+            result.add(ServiceSummary.of(id, s.total, s.errors, s.sumDurationMs));
+        }
+        return result;
+    }
+
+    private static boolean isBlank(String s) {
+        return s == null || s.isBlank();
+    }
+
+    public record Page<T>(List<T> content, int page, int size, long totalElements, int totalPages) {}
+}
