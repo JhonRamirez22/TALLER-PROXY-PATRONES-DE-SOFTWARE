@@ -26,6 +26,9 @@ Body de las operaciones: JSON, p. ej. `{"sku":"SKU-001","quantity":2}`.
 **Frontend → Vercel** (root directory `frontend`). Variable: `VITE_API_URL=https://<tu-backend>.up.railway.app` (sin `/` final).
 Despliega primero el backend, luego el frontend con su URL.
 
+## Patrones de diseño
+Ver [docs/PATRONES.md](docs/PATRONES.md): Proxy, Template Method, Command, Observer, Factory y Strategy, con diagrama de clases.
+
 ## Producción
 - Frontend (Vercel): https://taller-proxy-monitor.vercel.app
 - Backend (Railway): https://backend-production-2b53.up.railway.app
