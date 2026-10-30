@@ -25,3 +25,7 @@ Body de las operaciones: JSON, p. ej. `{"sku":"SKU-001","quantity":2}`.
 **Backend → Railway** (root directory `backend`, usa el `Dockerfile`). Variable: `CORS_ALLOWED_ORIGINS=https://<tu-app>.vercel.app`.
 **Frontend → Vercel** (root directory `frontend`). Variable: `VITE_API_URL=https://<tu-backend>.up.railway.app` (sin `/` final).
 Despliega primero el backend, luego el frontend con su URL.
+
+## Producción
+- Frontend (Vercel): https://taller-proxy-monitor.vercel.app
+- Backend (Railway): https://backend-production-2b53.up.railway.app
