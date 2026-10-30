@@ -39,7 +39,7 @@ export default function LogsTable({ page, onPage, filtered }) {
                     }}
                   >
                     <td className="col-chev"><ChevronIcon className={`chev ${isOpen ? 'chev-open' : ''}`} width={16} height={16} /></td>
-                    <td className="mono">{l.requestId.slice(0, 8)}</td>
+                    <td className="mono reqid">{l.requestId}</td>
                     <td>
                       <span className="swatch" style={{ background: SERVICE_META[l.serviceId]?.color }} aria-hidden="true" />
                       {SERVICE_META[l.serviceId]?.label || l.serviceId}
