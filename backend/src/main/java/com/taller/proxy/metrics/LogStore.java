@@ -6,32 +6,22 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.util.*;
 
-/** Almacen en memoria (acotado) de logs y contadores acumulados por servicio. */
+/** Observer que guarda los logs recientes en memoria (acotado) y los consulta con filtros y paginacion. */
 @Component
-public class LogStore {
-
-    private static final class Stats {
-        long total, errors, sumDurationMs;
-    }
+public class LogStore implements LogObserver {
 
     private final int maxEntries;
     private final Deque<LogEntry> entries = new ArrayDeque<>(); // mas reciente primero
-    private final Map<String, Stats> stats = new LinkedHashMap<>();
 
     public LogStore(@Value("${app.logs.max-entries:5000}") int maxEntries) {
         this.maxEntries = maxEntries;
     }
 
-    public synchronized void add(LogEntry entry) {
+    @Override
+    public synchronized void onLog(LogEntry entry) {
         entries.addFirst(entry);
         while (entries.size() > maxEntries) {
             entries.removeLast();
-        }
-        Stats s = stats.computeIfAbsent(entry.serviceId(), k -> new Stats());
-        s.total++;
-        s.sumDurationMs += entry.durationMs();
-        if (LogEntry.ERROR.equals(entry.status())) {
-            s.errors++;
         }
     }
 
@@ -49,15 +39,6 @@ public class LogStore {
         int toIdx = Math.min(fromIdx + safeSize, filtered.size());
         int totalPages = (int) Math.ceil(filtered.size() / (double) safeSize);
         return new Page<>(filtered.subList(fromIdx, toIdx), safePage, safeSize, filtered.size(), totalPages);
-    }
-
-    public synchronized List<ServiceSummary> summary(Collection<String> serviceIds) {
-        List<ServiceSummary> result = new ArrayList<>();
-        for (String id : serviceIds) {
-            Stats s = stats.getOrDefault(id, new Stats());
-            result.add(ServiceSummary.of(id, s.total, s.errors, s.sumDurationMs));
-        }
-        return result;
     }
 
     private static boolean isBlank(String s) {

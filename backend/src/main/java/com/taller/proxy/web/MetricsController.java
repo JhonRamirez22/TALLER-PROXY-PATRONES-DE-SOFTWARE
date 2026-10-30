@@ -2,42 +2,41 @@ package com.taller.proxy.web;
 
 import com.taller.proxy.metrics.LogEntry;
 import com.taller.proxy.metrics.LogStore;
+import com.taller.proxy.metrics.MetricsAggregator;
 import com.taller.proxy.metrics.ServiceSummary;
 import com.taller.proxy.proxy.ServiceException;
-import com.taller.proxy.service.InventoryService;
-import com.taller.proxy.service.OrderService;
-import com.taller.proxy.service.PaymentService;
+import com.taller.proxy.simulation.LoadSimulator;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeParseException;
-import java.util.*;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/metrics")
 public class MetricsController {
 
-    private final LogStore store;
-    private final ProxyRegistry registry;
-    private final InventoryService inventory;
-    private final OrderService orders;
-    private final PaymentService payments;
+    private static final int SIMULATED_CALLS = 50;
 
-    public MetricsController(LogStore store, ProxyRegistry registry, InventoryService inventory,
-                             OrderService orders, PaymentService payments) {
+    private final LogStore store;
+    private final MetricsAggregator metrics;
+    private final ProxyRegistry registry;
+    private final LoadSimulator simulator;
+
+    public MetricsController(LogStore store, MetricsAggregator metrics, ProxyRegistry registry, LoadSimulator simulator) {
         this.store = store;
+        this.metrics = metrics;
         this.registry = registry;
-        this.inventory = inventory;
-        this.orders = orders;
-        this.payments = payments;
+        this.simulator = simulator;
     }
 
     @GetMapping("/summary")
     public Map<String, Object> summary() {
-        List<ServiceSummary> services = store.summary(registry.serviceIds());
+        List<ServiceSummary> services = metrics.summary(registry.serviceIds());
         long total = services.stream().mapToLong(ServiceSummary::totalCalls).sum();
         long errors = services.stream().mapToLong(ServiceSummary::errorCalls).sum();
         double weightedAvg = total == 0 ? 0
@@ -62,60 +61,8 @@ public class MetricsController {
     }
 
     @PostMapping("/simulate-load")
-    public Map<String, Object> simulateLoad() {
-        ThreadLocalRandom r = ThreadLocalRandom.current();
-        String[] names = {"Ana", "Luis", "Marta", "Pedro", "Sofia"};
-        int ok = 0, failed = 0;
-        for (int i = 0; i < 50; i++) {
-            String service = registry.serviceIds().stream().skip(r.nextInt(3)).findFirst().orElseThrow();
-            String sku = inventory.skus().get(r.nextInt(inventory.skus().size()));
-            String op;
-            Map<String, Object> p = new HashMap<>();
-            switch (service) {
-                case "inventory" -> {
-                    op = new String[]{"listProducts", "getStock", "checkAvailability", "addStock"}[r.nextInt(4)];
-                    p.put("sku", sku);
-                    p.put("quantity", r.nextInt(1, 10));
-                }
-                case "orders" -> {
-                    Optional<String> id = orders.anyOrderId();
-                    int pick = r.nextInt(3);
-                    if (pick == 0 || id.isEmpty()) {
-                        op = "createOrder";
-                        p.put("sku", sku);
-                        p.put("quantity", r.nextInt(1, 4));
-                        p.put("customer", names[r.nextInt(names.length)]);
-                    } else if (pick == 1) {
-                        op = "getOrder";
-                        p.put("orderId", id.get());
-                    } else {
-                        op = "listOrders";
-                    }
-                }
-                default -> {
-                    Optional<String> id = payments.anyPaymentId();
-                    int pick = r.nextInt(3);
-                    if (pick == 0 || id.isEmpty()) {
-                        op = "charge";
-                        p.put("orderId", orders.anyOrderId().orElse("N/A"));
-                        p.put("amount", Math.round(r.nextDouble(10, 500) * 100) / 100.0);
-                        p.put("method", r.nextBoolean() ? "CARD" : "PSE");
-                    } else if (pick == 1) {
-                        op = "getPayment";
-                        p.put("paymentId", id.get());
-                    } else {
-                        op = "listPayments";
-                    }
-                }
-            }
-            try {
-                registry.get(service).execute(op, p);
-                ok++;
-            } catch (RuntimeException e) {
-                failed++;
-            }
-        }
-        return Map.of("generated", 50, "success", ok, "errors", failed);
+    public LoadSimulator.Result simulateLoad() {
+        return simulator.run(SIMULATED_CALLS);
     }
 
     private static Instant parseInstant(String value, boolean endOfDay) {

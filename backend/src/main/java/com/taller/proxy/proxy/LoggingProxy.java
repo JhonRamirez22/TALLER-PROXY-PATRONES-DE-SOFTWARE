@@ -1,7 +1,7 @@
 package com.taller.proxy.proxy;
 
 import com.taller.proxy.metrics.LogEntry;
-import com.taller.proxy.metrics.LogStore;
+import com.taller.proxy.metrics.LogPublisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,12 +19,12 @@ public class LoggingProxy<T> implements MicroserviceProxy<T> {
 
     private final String serviceId;
     private final MicroserviceProxy<T> delegate;
-    private final LogStore store;
+    private final LogPublisher publisher;
 
-    public LoggingProxy(String serviceId, MicroserviceProxy<T> delegate, LogStore store) {
+    public LoggingProxy(String serviceId, MicroserviceProxy<T> delegate, LogPublisher publisher) {
         this.serviceId = serviceId;
         this.delegate = delegate;
-        this.store = store;
+        this.publisher = publisher;
     }
 
     @Override
@@ -41,14 +41,14 @@ public class LoggingProxy<T> implements MicroserviceProxy<T> {
             T result = delegate.execute(operation, params);
             long ms = elapsedMs(start);
             log.info("[{}] SUCCESS {}.{} in {}ms", requestId, serviceId, operation, ms);
-            store.add(new LogEntry(requestId, serviceId, operation, ms, LogEntry.SUCCESS, timestamp,
+            publisher.publish(new LogEntry(requestId, serviceId, operation, ms, LogEntry.SUCCESS, timestamp,
                     loggedParams, result, null));
             return result;
         } catch (RuntimeException e) {
             long ms = elapsedMs(start);
             String summary = summarize(e);
             log.warn("[{}] ERROR {}.{} in {}ms -> {}", requestId, serviceId, operation, ms, summary);
-            store.add(new LogEntry(requestId, serviceId, operation, ms, LogEntry.ERROR, timestamp,
+            publisher.publish(new LogEntry(requestId, serviceId, operation, ms, LogEntry.ERROR, timestamp,
                     loggedParams, null, summary));
             throw e;
         }
